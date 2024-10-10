@@ -2,12 +2,19 @@
 
 import { useState } from "react";
 import { IoClose } from "react-icons/io5";
+import { postPredecir } from "@/services/api";
 
 export default function Form() {
   type Opinion = {
     text: string;
     date: Date;
-    prediction?: number;
+    ods?: number;
+    score?: number;
+  };
+
+  type Prediccion = {
+    ods: number;
+    score: number;
   };
 
   const MAX_TOKENS = 2000;
@@ -17,6 +24,9 @@ export default function Form() {
     date: new Date(),
   });
   const [valid, setValid] = useState(false);
+
+  // Estados permitidos: "No cargadas", "Cargando", "Cargadas", "Error del servidor", "Respuesta invalida"
+  const [estadoPredicciones, setEstadoPredicciones] = useState("No cargadas");
 
   const handleOpinionChange = (event: any) => {
     if (event.target.value.length > MAX_TOKENS) {
@@ -28,27 +38,55 @@ export default function Form() {
   const handleAddOpinion = () => {
     if (opinion.text.length > 0) {
       setOpiniones([...opiniones, { ...opinion, date: new Date() }]);
-      setOpinion({ text: "", date: new Date() });
+      setOpinion({ text: "", date: new Date(),  });
     }
   };
 
-  const handleEnviar = () => {
-    if (opiniones.length === 0) {
+  const handleEnviar = async () => {
+    const opinionesSinPrediccion = opiniones.filter(
+      (opinion) => opinion.ods === undefined
+    );
+    if (opinionesSinPrediccion.length === 0) {
+      setEstadoPredicciones("No hay opiniones para predecir");
       return;
     } else {
-      // Retornar la lista de opiniones que no tengan una predicción
-      const opinionesSinPrediccion = opiniones.filter(
-        (opinion) => opinion.prediction === undefined
-      );
       // lista de textos
       const opinionesTextos = opinionesSinPrediccion.map(
         (opinion) => opinion.text
       );
-      const jsonDict = { data: opinionesTextos };
-      const json = JSON.stringify(jsonDict);
-      console.log(json);
+
+      const response = await postPredecir(opinionesTextos);
+      setEstadoPredicciones("Cargando");
+      cargarPredicciones(response.predicciones);
     }
     setValid(true);
+  };
+
+  const cargarPredicciones = (predicciones: Prediccion[]) => {
+    const opinionesSinPrediccion = opiniones.filter(
+      (opinion) => opinion.ods === undefined
+    );
+    const opinionesConPrediccion = opiniones.filter(
+      (opinion) => opinion.ods !== undefined
+    );
+
+    if (opinionesSinPrediccion.length !== predicciones.length) {
+      setEstadoPredicciones("Error del servidor");
+      return;
+    } else if (predicciones.length === 0) {
+      setEstadoPredicciones("Respuesta invalida");
+      return;
+    } else {
+
+      // Opiniones sin prediccion
+      let nuevasOpiniones = [...opinionesSinPrediccion];
+      for (let i = 0; i < predicciones.length; i++) {
+        nuevasOpiniones[i].ods = predicciones[i].ods;
+        nuevasOpiniones[i].score = predicciones[i].score;
+      }
+      setOpiniones([...opinionesConPrediccion, ...nuevasOpiniones]);
+      setEstadoPredicciones("Cargadas");
+    }
   };
 
   const getDate = (date: Date) => {
@@ -112,9 +150,9 @@ export default function Form() {
                   <div className="flex flex-col gap-2 items-center">
                     {
                       // Si la opinión tiene una predicción, mostrarla
-                      opinion.prediction !== undefined && (
+                      opinion.ods !== undefined && (
                         <p className="font-semibold">
-                          {formatOds(opinion.prediction)}
+                          {formatOds(opinion.ods)} - {opinion.score}
                         </p>
                       )
                     }
@@ -190,9 +228,23 @@ export default function Form() {
               e.stopPropagation();
             }}
           >
-            <p className="font-semibold">Opiniones predecidas correctamente</p>
+            
+            {estadoPredicciones === "Cargando" && (
+              <p className="font-semibold">Obteniendo predicciones...</p>
+            )}
+            {!(
+              estadoPredicciones === "Cargadas" ||
+              estadoPredicciones === "Cargando"
+            ) && (
+              <p className="font-semibold">
+                No se pudo completar la predicción: {estadoPredicciones}
+              </p>
+            )}
+            {estadoPredicciones === "Cargadas" && (
+                <p className="font-semibold">Opiniones predecidas correctamente.</p>
+              )}
             <button
-              className="bg-green-400 rounded-xl p-2 w-fit h-fit text-white font-semibold"
+              className="bg-[#243642] rounded-xl p-2 w-fit h-fit text-white font-semibold"
               onClick={() => {
                 setValid(false);
               }}

@@ -2,8 +2,17 @@ from typing import Union
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permitir cualquier origen
+    allow_credentials=True,
+    allow_methods=["*"],  # Permitir todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],  # Permitir todos los headers
+)
     
 class OpinionesLista(BaseModel):
     data: list[str]
@@ -45,7 +54,7 @@ def predecir( prediccion: OpinionesODSLista):
 def predecir_opiniones(opiniones: list[str]):
     predicciones = []
     for _ in opiniones:
-        predicciones.append({"ods": 1, "score": 0.9})
+        predicciones.append({"ods": 3, "score": 0.9})
     return predicciones
 
 def reentrenar (ListaOpiniones: OpinionesODSLista):
