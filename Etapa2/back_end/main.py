@@ -1,15 +1,21 @@
 from typing import Union
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI
+from clases import OpinionesLista, OpinionODS, OpinionesODSLista, Metricas
+from train_model import reentrenar, convertir_a_dataframe, cargar_metricas
+from contextlib import asynccontextmanager
 import joblib
 import os
-import spacy
-import nltk
 import pandas as pd
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    #reentrenar(df=None)
+    yield
+    
+    
+app = FastAPI(lifespan=lifespan)
 
 model_path = './model/svm_text_pipeline.joblib'
 if not os.path.exists(model_path):
@@ -24,16 +30,8 @@ app.add_middleware(
     allow_methods=["*"],  # Permitir todos los métodos (GET, POST, etc.)
     allow_headers=["*"],  # Permitir todos los headers
 )
-    
-class OpinionesLista(BaseModel):
-    data: list[str]
 
-class OpinionODS(BaseModel):
-    text: str
-    ods: int
 
-class OpinionesODSLista(BaseModel):
-    data: list[OpinionODS]
 
 @app.get("/")
 def read_root():
@@ -66,7 +64,7 @@ def reentrenar_opiniones(prediccion: OpinionesODSLista):
     print(f"Datos recibidos para reentrenamiento: {prediccion.data}")
     
     # Realizar el reentrenamiento
-    resultado_reentrenamiento = reentrenar(prediccion.data)
+    resultado_reentrenamiento = reentrenar_local(prediccion.data)
     
     # Imprimir los resultados del reentrenamiento
     print(f"Resultados del reentrenamiento: {resultado_reentrenamiento}")
@@ -93,20 +91,21 @@ def predecir_opiniones(opiniones: list[str]):
                 "score": float(max(probabilidad))  # Obtener la probabilidad más alta
             })
 
-        print(f"Predicciones generadas: {resultado}")
         return resultado
 
     except Exception as e:
         print(f"Error al predecir las opiniones: {e}")
         return [{"ods": None, "score": None} for _ in opiniones]  
 
-def reentrenar(ListaOpiniones: list[OpinionODS]):
-    precision = 0.9
-    recall = 0.9
-    f1 = 0.9
+def reentrenar_local(ListaOpiniones: list[OpinionODS]):
+    
+    # Convertir la lista de opiniones en un DataFrame
+    df = convertir_a_dataframe(ListaOpiniones)
+    reentrenar(df)
+    metricas = cargar_metricas('./data/model/metricas.json')
     
     # Imprimir los datos de cada opinión usada para reentrenamiento
     for opinion in ListaOpiniones:
         print(f"Reentrenando con opinión: {opinion.text}, ODS: {opinion.ods}")
     
-    return {"precision": precision, "recall": recall, "f1": f1}
+    return {"precision": metricas.precision, "recall": metricas.recall, "f1": metricas.f1}

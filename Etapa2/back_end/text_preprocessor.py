@@ -3,11 +3,14 @@ import unicodedata
 import nltk
 import spacy
 from sklearn.base import BaseEstimator, TransformerMixin
+
 import pandas as pd
 
 # Descargar los recursos necesarios de NLTK
 nltk.download('punkt')
 nltk.download('stopwords')
+nltk.download('punkt_tab')
+
 
 # Cargar el modelo de Spacy para español
 nlp = spacy.load('es_core_news_sm')

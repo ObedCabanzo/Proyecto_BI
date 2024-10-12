@@ -20,7 +20,7 @@ export const convertirCSVaJSON = async (file: File, tipo: string) => {
           .slice(1)
           .map((linea) => {
             if (linea !== "") {
-              return linea.split(",")[0].trim();
+              return linea.split("||")[0].trim();
             }
           })
           .filter((linea) => linea !== undefined);
@@ -28,18 +28,19 @@ export const convertirCSVaJSON = async (file: File, tipo: string) => {
       }
 
       if (tipo == "reentrenamiento") {
-        const columnas = lineas[0].split(",").map((columna) => columna.trim());
+        const columnas = lineas[0].split("||").map((columna) => columna.trim());
+        console.log(columnas);
         const indiceOds = columnas.indexOf("ods");
-        const indicaText = columnas.indexOf("text");
+        const indiceText = columnas.indexOf("text");
 
         // Si encuentra lineas vacias las elimina
         const data = lineas
           .slice(1)
           .map((linea) => {
             if (linea !== "") {
-              const partes = linea.split(",");
+              const partes = linea.split("||");
               return {
-                text: partes[indicaText].trim(),
+                text: partes[indiceText].trim(),
                 ods: parseInt(partes[indiceOds].trim()),
               };
             }
@@ -111,7 +112,7 @@ export const verificarValidezCSV = async (file: File, tipo: string) => {
     reader.onload = (e) => {
       const contenido = e.target?.result as string;
       const lineas = contenido.split("\n");
-      const columnas = lineas[0].split(",").map((columna) => columna.trim());
+      const columnas = lineas[0].split("||").map((columna) => columna.trim());
 
       if (lineas.length <= 1) {
         reject("El archivo está vacío");
@@ -157,12 +158,12 @@ export const numeroAPorcentaje = (numero: number): string => {
 
 export const generarCSVPredicciones = (
   opiniones: string[],
-  predicciones: { text: string; ods: number }[]
+  predicciones: { score: number; ods: number }[]
 ) => {
   // Generar un CSV con dos columnas: "opinion" y "ods"
-  let csv = "text,ods\n";
+  let csv = "text,ods,score\n";
   for (let i = 0; i < opiniones.length; i++) {
-    csv += `${opiniones[i]},${predicciones[i].ods}\n`;
+    csv += `${opiniones[i]},${predicciones[i].ods},${predicciones[i].score}\n`;
   }
   return csv;
 };

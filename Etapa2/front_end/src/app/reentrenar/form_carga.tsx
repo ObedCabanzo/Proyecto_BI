@@ -29,7 +29,7 @@ type OpinionODSDataSet = {
 export default function FormCarga() {
   const [file, setFile] = useState<FileAccepted>({ file: null, tipo: null });
   const [fileState, setFileState] = useState<string>("no cargado");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null | undefined>(null);
   // Estados permitidos: "completado", "Cargando",  "Error del servidor", "Respuesta invalida"
   const [estadoReentrenamiento, setEstadoReentrenamiento] =
     useState("no cargadas");
@@ -91,6 +91,11 @@ export default function FormCarga() {
   };
 
   const handleEnviarArchivo = async () => {
+
+    if (estadoReentrenamiento === "cargando") {
+      return;
+    }
+
     const archivo = file.file;
     const tipo = file.tipo;
     if (archivo === null) {
@@ -113,10 +118,16 @@ export default function FormCarga() {
           console.log(final)
           postReentrenar(final)
             .then((response) => {
-              setEstadoReentrenamiento("completado");
-              const data: Metricas = response;
-              setMetricas(data);
-              removeFile();
+              console.log(response)
+              if (response === null || response === undefined) {
+                setEstadoReentrenamiento("error");
+              }
+              else{
+                setEstadoReentrenamiento("completado");
+                const data: Metricas = response;
+                setMetricas(data);
+                removeFile();
+              }
             })
             .catch((error) => {
               cambiarEstadoArchivo("error", null, error, null, true);
@@ -130,10 +141,17 @@ export default function FormCarga() {
       console.log(json)
       postReentrenar(json)
         .then((response) => {
-          setEstadoReentrenamiento("completado");
-          const data: Metricas = response;
-          setMetricas(data);
-          removeFile();
+          console.log(response)
+
+          if (response === null || response === undefined) {
+            setEstadoReentrenamiento("error");
+          }
+          else{
+            setEstadoReentrenamiento("completado");
+            const data: Metricas = response;
+            setMetricas(data);
+            removeFile();
+          }
         })
         .catch((error) => {
           cambiarEstadoArchivo("error", null, error, null, true);
@@ -182,7 +200,9 @@ export default function FormCarga() {
         <p className="text-[#091057] font-semibold">
           Si el archivo es un CSV debe tener dos columnas llamadas{" "}
           <span className="font-bold">"text"</span> y{" "}
-          <span className="font-bold">"ods"</span>.
+          <span className="font-bold">"ods"</span>. <span className="fold">
+          (Asegurate que el delimitador sean dos barras paralelas de esta forma: "||")
+          </span>
         </p>
         <p className="text-[#091057] font-semibold">
           Si el archivo es un JSON debe tener una unica propiedad llamada{" "}
@@ -221,7 +241,7 @@ export default function FormCarga() {
         </label>
         <button
           className={"px-8 py-4 rounded-2xl bg-green-400 text-white w-fit ".concat(
-            file.file === null ? "bg-opacity-50 cursor-not-allowed" : ""
+            file.file === null || estadoReentrenamiento === "cargando" ? "bg-opacity-50 cursor-not-allowed" : ""
           )}
           onClick={handleEnviarArchivo}
         >
@@ -261,7 +281,7 @@ export default function FormCarga() {
       }
       {
         // Si el archivo está cargando, mostrarlo
-        estadoReentrenamiento === "completado" && metricas !== null && (
+        estadoReentrenamiento === "completado" && metricas !== null && metricas !== undefined && (
           <>
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold py-2 text-green-600">
               Reentrenamiento de modelo completado
@@ -283,6 +303,20 @@ export default function FormCarga() {
                 F1: {numeroAPorcentaje(metricas.f1)}
               </p>
             </div>
+          </>
+        )
+      }
+      {
+        // Si el archivo está cargando, mostrarlo
+        estadoReentrenamiento === "error" && metricas === null && (
+          <>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold py-2 text-green-600">
+              Lo sentimos.
+            </h1>
+            <p className="font-semibold text-red-500">
+              Hubo un error al reentrenar el modelo.
+            </p>
+           
           </>
         )
       }

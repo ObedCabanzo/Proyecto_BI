@@ -86,6 +86,10 @@ export default function FormCarga() {
   const handleEnviarArchivo = async () => {
     const archivo = file.file;
     const tipo = file.tipo;
+
+    if (estadoPredicciones === "cargando") {
+      return;
+    }
     if (archivo === null) {
       cambiarEstadoArchivo(
         "error",
@@ -225,7 +229,7 @@ export default function FormCarga() {
         </label>
         <button
           className={"px-8 py-4 rounded-2xl bg-green-400 text-white w-fit ".concat(
-            file.file === null ? "bg-opacity-50 cursor-not-allowed" : ""
+            file.file === null || estadoPredicciones === "cargando" ? "bg-opacity-50 cursor-not-allowed" : ""
           )}
           onClick={handleEnviarArchivo}
         >
