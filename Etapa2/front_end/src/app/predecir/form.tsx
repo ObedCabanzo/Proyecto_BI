@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { IoClose } from "react-icons/io5";
 import { postPredecir } from "@/services/api";
+import { numeroAPorcentaje } from "@/services/utils";
+
 
 export default function Form() {
   type Opinion = {
@@ -55,7 +57,7 @@ export default function Form() {
         (opinion) => opinion.text
       );
 
-      const response = await postPredecir(opinionesTextos);
+      const response = await postPredecir({data: opinionesTextos});
       setEstadoPredicciones("Cargando");
       cargarPredicciones(response.predicciones);
     }
@@ -150,10 +152,15 @@ export default function Form() {
                   <div className="flex flex-col gap-2 items-center">
                     {
                       // Si la opinión tiene una predicción, mostrarla
-                      opinion.ods !== undefined && (
+                      opinion.ods !== undefined && opinion.score  && (
+                        <>
                         <p className="font-semibold">
-                          {formatOds(opinion.ods)} - {opinion.score}
+                          {formatOds(opinion.ods)} 
                         </p>
+                        <p className="font-semibold">
+                          Probabilidad: {numeroAPorcentaje(opinion.score)}
+                        </p>
+                        </>
                       )
                     }
                     <button

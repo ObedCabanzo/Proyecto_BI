@@ -1,142 +1,172 @@
 "use client";
 import { useState } from "react";
 import { IoClose } from "react-icons/io5";
-import { convertirCSVaJSON } from "@/services/utils";
+import {
+  convertirCSVaJSON,
+  verificarValidezJSON,
+  verificarValidezCSV,
+  verificarTipoArchivo,
+  numeroAPorcentaje,
+} from "@/services/utils";
+
+import { postReentrenar } from "@/services/api";
+
+type FileAccepted = {
+  file: File | null;
+  tipo: "csv" | "json" | null;
+};
+
+type Metricas = {
+  precision: number;
+  recall: number;
+  f1: number;
+};
+
+type OpinionODSDataSet = {
+  data: { text: string; ods: number }[];
+};
 
 export default function FormCarga() {
-  const [validFile, setValidFile] = useState<Boolean>(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<FileAccepted>({ file: null, tipo: null });
+  const [fileState, setFileState] = useState<string>("no cargado");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<Boolean>(false);
+  // Estados permitidos: "completado", "Cargando",  "Error del servidor", "Respuesta invalida"
+  const [estadoReentrenamiento, setEstadoReentrenamiento] =
+    useState("no cargadas");
+  const [metricas, setMetricas] = useState<Metricas | null>(null);
 
   const handleFileUpload = async (event: any) => {
-    setError(null); // Reiniciar el error al seleccionar un nuevo archivo
-    setValidFile(false); // Reiniciar el estado de validez
     const file = event.target.files[0];
+    setFileState("cargando");
+    if (file === undefined) {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "No se ha seleccionado un archivo",
+        null,
+        true
+      );
+      return;
+    }
+    const tipo = await verificarTipoArchivo(file);
+    if (tipo !== "csv" && tipo !== "json") {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "El archivo debe ser de tipo CSV o JSON",
+        null,
+        true
+      );
+      return;
+    }
 
-    // Espera a que se verifique la validez del archivo
-    const isFileValid = await verificarValidezArchivo(file);
+    if (tipo === "csv") {
+      verificarValidezCSV(file, "reentrenamiento")
+        .then((validacion) => {
+          if (validacion !== "valido") {
+            cambiarEstadoArchivo("error", null, validacion, null, true);
+            return;
+          }
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+          return;
+        });
+    } else if (tipo === "json") {
+      verificarValidezJSON(file, "reentrenamiento")
+        .then((validacion) => {
+          if (validacion !== "valido") {
+            cambiarEstadoArchivo("error", null, validacion, null, true);
+            return;
+          }
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+          return;
+        });
+    }
 
-    if (isFileValid) {
-      setFile(file);
-      setValidFile(true);
-      console.log("Archivo cargado", file);
-    } else {
+    cambiarEstadoArchivo("cargado", file, null, tipo, false);
+    // Verificar que el archivo es CSV o JSON
+  };
+
+  const handleEnviarArchivo = async () => {
+    const archivo = file.file;
+    const tipo = file.tipo;
+    if (archivo === null) {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "No se ha seleccionado un archivo",
+        null,
+        true
+      );
+      return;
+    }
+
+    setEstadoReentrenamiento("cargando");
+
+    if (tipo === "csv") {
+      convertirCSVaJSON(archivo, "reentrenamiento")
+        .then((json) => {
+          const final : OpinionODSDataSet = json as OpinionODSDataSet;
+          console.log(final)
+          postReentrenar(final)
+            .then((response) => {
+              setEstadoReentrenamiento("completado");
+              const data: Metricas = response;
+              setMetricas(data);
+              removeFile();
+            })
+            .catch((error) => {
+              cambiarEstadoArchivo("error", null, error, null, true);
+            });
+        })
+        .catch((error) => {
+          setEstadoReentrenamiento("error");
+        });
+    } else if (tipo === "json") {
+      const json: OpinionODSDataSet = JSON.parse(await archivo.text());
+      console.log(json)
+      postReentrenar(json)
+        .then((response) => {
+          setEstadoReentrenamiento("completado");
+          const data: Metricas = response;
+          setMetricas(data);
+          removeFile();
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+        });
+    }
+  };
+
+  const cambiarEstadoArchivo = (
+    estado: string,
+    file: File | null,
+    error: string | null,
+    tipo: "csv" | "json" | null,
+    remove: Boolean
+  ) => {
+    setFileState(estado);
+    setError(error);
+    if (file !== null) {
+      setFile({ file: file, tipo: tipo });
+    }
+    if (remove) {
       removeFile();
     }
   };
 
-  const handleEnviarArchivo = async () => {
-    if (validFile && file) {
-      if (file.type === "text/csv") {
-        const jsonDict = await convertirCSVaJSON(file);
-        const json = JSON.stringify(jsonDict);
-        setSuccess(true);
-        console.log(json);
-      } else if (file.type === "application/json") {
-        console.log(file);
-        setSuccess(true);
-      }
-    }
-  };
-
   const removeFile = () => {
-    setFile(null);
-    setValidFile(false);
+    setFile({
+      file: null,
+      tipo: null,
+    });
     const fileInput = document.getElementById("fileInput") as HTMLInputElement;
     if (fileInput) {
       fileInput.value = "";
     }
-  };
-
-  const validarArchivo = (file: File) => {
-    if (!file) {
-      setError("No se ha cargado ningún archivo");
-      return false;
-    }
-
-    if (file.type !== "application/json" && file.type !== "text/csv") {
-      setError("El archivo debe ser de tipo CSV o JSON");
-      return false;
-    }
-    return true;
-  };
-
-  const verificarValidezArchivo = (file: File): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (!validarArchivo(file)) {
-        resolve(false);
-        return;
-      }
-
-      const reader = new FileReader();
-
-      if (file.type === "text/csv") {
-        reader.onload = (e) => {
-          const contenido = e.target?.result as string;
-          const lineas = contenido.split("\n");
-
-          if (lineas.length === 0) {
-            setError("El archivo está vacío");
-            resolve(false);
-            return;
-          }
-
-          const columnas = lineas[0].split(",");
-          if (
-            columnas.length !== 2 ||
-            columnas[0] !== "text" ||
-            columnas[1] !== "ods"
-          ) {
-            setError(
-              "El archivo CSV debe tener una columna llamada 'text' y otra llamada 'ods'"
-            );
-            resolve(false);
-            return;
-          }
-          resolve(true);
-        };
-        reader.readAsText(file);
-      } else if (file.type === "application/json") {
-        reader.onload = (e) => {
-          const contenido = e.target?.result as string;
-          try {
-            const json = JSON.parse(contenido);
-            // El json es una lista de objetos con propiedades "text" y "ods"
-            if (!Array.isArray(json)) {
-              setError("El archivo JSON debe ser una lista de objetos");
-              resolve(false);
-              return;
-            } else if (json.length === 0) {
-              setError("El archivo JSON está vacío");
-              resolve(false);
-              return;
-            }
-            for (let i = 0; i < json.length; i++) {
-              if (
-                !json[i].hasOwnProperty("text") ||
-                !json[i].hasOwnProperty("ods")
-              ) {
-                setError(
-                  "Cada objeto del archivo JSON debe tener una propiedad 'text' y una propiedad 'ods'"
-                );
-                resolve(false);
-                return;
-              }
-            }
-
-            resolve(true);
-          } catch (error) {
-            setError("El archivo JSON no es válido");
-            resolve(false);
-          }
-        };
-        reader.readAsText(file);
-      } else {
-        setError("El archivo debe ser de tipo CSV o JSON");
-        resolve(false);
-      }
-    });
   };
 
   return (
@@ -146,20 +176,20 @@ export default function FormCarga() {
       </h1>
       <p>
         Cargar archivo <span className="font-semibold">(CSV o JSON)</span> con
-        múltiples instancias de datos.
+        múltiples instancias de datos para predecir.
       </p>
       <div>
         <p className="text-[#091057] font-semibold">
-          Si el archivo es un CSV debe tener unicamente dos columna llamadas{" "}
-          <span className="font-bold">"text"</span>, que contiene los textos, y{" "}
-          <span className="font-bold">"ods"</span>, que contiene el ODS asociado
-          a cada texto.
+          Si el archivo es un CSV debe tener dos columnas llamadas{" "}
+          <span className="font-bold">"text"</span> y{" "}
+          <span className="font-bold">"ods"</span>.
         </p>
         <p className="text-[#091057] font-semibold">
-          Si el archivo es un JSON debe tener una lista de objetos, donde cada
-          objeto tiene una propiedad <span className="font-bold">"text"</span>{" "}
-          con el texto de la opinión y una propiedad{" "}
-          <span className="font-bold">"ods"</span> con el ODS asociado.
+          Si el archivo es un JSON debe tener una unica propiedad llamada{" "}
+          <span className="font-bold">"data"</span>, la cual es una lista de
+          objetos, cada objeto debe tener las propiedades{" "}
+          <span className="font-bold">"text"</span> y{" "}
+          <span className="font-bold">"ods"</span>.
         </p>
       </div>
       {
@@ -174,7 +204,7 @@ export default function FormCarga() {
       <div className="flex gap-4 py-4">
         <label
           className={"px-8 py-4 rounded-2xl bg-[#0D92F4] text-white w-fit inline-block  ".concat(
-            file !== null
+            file.file !== null
               ? "bg-opacity-50 cursor-not-allowed "
               : "cursor-pointer"
           )}
@@ -186,24 +216,39 @@ export default function FormCarga() {
             onChange={(e) => handleFileUpload(e)}
             className="hidden"
             id="fileInput" // Agregar un id al input para poder referenciarlo
-            disabled={file !== null}
+            disabled={file.file !== null}
           />
         </label>
         <button
           className={"px-8 py-4 rounded-2xl bg-green-400 text-white w-fit ".concat(
-            !validFile ? "bg-opacity-50 cursor-not-allowed" : ""
+            file.file === null ? "bg-opacity-50 cursor-not-allowed" : ""
           )}
           onClick={handleEnviarArchivo}
         >
-          Predecir
+          Reentrenar
         </button>
       </div>
       {
+        // Si el archivo está cargando, mostrarlo
+        fileState === "cargando" && (
+          <p className="font-semibold">Cargando archivo, por favor espere...</p>
+        )
+      }
+      {
+        // Si el archivo está cargando, mostrarlo
+        estadoReentrenamiento === "cargando" && (
+          <p className="font-semibold">
+            Reentrenando modelo, por favor espere...
+          </p>
+        )
+      }
+
+      {
         // Si hay un archivo cargado, mostrarlo
-        file !== null && (
+        file.file !== null && error === null && (
           <div className="flex gap-4 items-center">
             <p className="font-semibold">Archivo cargado:</p>
-            <p>{file.name}</p>
+            <p>{file.file.name}</p>
             <IoClose
               className="w-8 h-auto text-red-500 cursor-pointer"
               title="Remover archivo"
@@ -214,31 +259,33 @@ export default function FormCarga() {
           </div>
         )
       }
-      {success && (
-        <div
-          className=" fixed top-0 left-0 flex justify-center items-center w-full h-screen z-[200]  bg-black bg-opacity-50"
-          onClick={(e) => {
-            setSuccess(false);
-          }}
-        >
-          <div
-            className="flex flex-col gap-2 bg-white rounded-2xl p-4"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <p className="font-semibold">Opiniones predecidas correctamente</p>
-            <button
-              className="bg-green-400 rounded-xl p-2 w-fit h-fit text-white font-semibold"
-              onClick={() => {
-                setSuccess(false);
-              }}
-            >
-              Aceptar
-            </button>
-          </div>
-        </div>
-      )}
+      {
+        // Si el archivo está cargando, mostrarlo
+        estadoReentrenamiento === "completado" && metricas !== null && (
+          <>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold py-2 text-green-600">
+              Reentrenamiento de modelo completado
+            </h1>
+            <p className="font-semibold">
+              El modelo ha sido reentrenado exitosamente.
+            </p>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold py-2 text-[#091057]">
+              Metricas del modelo
+            </h1>
+            <div className=" flex flex-col gap-1">
+              <p className="font-semibold">
+                Precision: {numeroAPorcentaje(metricas.precision)}
+              </p>
+              <p className="font-semibold">
+                Recall: {numeroAPorcentaje(metricas.recall)}
+              </p>
+              <p className="font-semibold">
+                F1: {numeroAPorcentaje(metricas.f1)}
+              </p>
+            </div>
+          </>
+        )
+      }
     </div>
   );
 }

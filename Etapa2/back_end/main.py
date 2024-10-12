@@ -22,7 +22,7 @@ class OpinionODS(BaseModel):
     ods: int
 
 class OpinionesODSLista(BaseModel):
-    list[OpinionODS]
+    data: list[OpinionODS]
     
 
 
@@ -47,9 +47,7 @@ def predecir( opiniones: OpinionesLista):
 
 @app.post("/reentrenar/")
 def predecir( prediccion: OpinionesODSLista):
-    return (reentrenar(prediccion))
-
-
+    return (reentrenar(prediccion.data))
 
 def predecir_opiniones(opiniones: list[str]):
     predicciones = []
@@ -57,7 +55,7 @@ def predecir_opiniones(opiniones: list[str]):
         predicciones.append({"ods": 3, "score": 0.9})
     return predicciones
 
-def reentrenar (ListaOpiniones: OpinionesODSLista):
+def reentrenar (ListaOpiniones: list[OpinionODS]):
     precision = 0.9
     recall = 0.9
     f1 = 0.9

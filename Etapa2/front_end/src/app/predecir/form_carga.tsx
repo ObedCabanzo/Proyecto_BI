@@ -1,122 +1,180 @@
 "use client";
 import { useState } from "react";
 import { IoClose } from "react-icons/io5";
-import { convertirCSVaJSON } from "@/services/utils";
+import {
+  convertirCSVaJSON,
+  verificarValidezJSON,
+  verificarValidezCSV,
+  verificarTipoArchivo,
+  generarCSVPredicciones,
+} from "@/services/utils";
+
+import { postPredecir } from "@/services/api";
+
+type FileAccepted = {
+  file: File | null;
+  tipo: "csv" | "json" | null;
+};
+
+type OpinionDataSet = {
+  data: string[];
+};
 
 export default function FormCarga() {
-  const [validFile, setValidFile] = useState<Boolean>(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<FileAccepted>({ file: null, tipo: null });
+  const [fileState, setFileState] = useState<string>("no cargado");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<Boolean>(false);
+  // Estados permitidos: "No cargadas", "Cargando", "Cargadas", "Error del servidor", "Respuesta invalida"
+  const [estadoPredicciones, setEstadoPredicciones] = useState("no cargadas");
+  const [csv, setCsv] = useState<string | null>(null);
 
   const handleFileUpload = async (event: any) => {
-    setError(null); // Reiniciar el error al seleccionar un nuevo archivo
-    setValidFile(false); // Reiniciar el estado de validez
     const file = event.target.files[0];
+    setFileState("cargando");
+    if (file === undefined) {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "No se ha seleccionado un archivo",
+        null,
+        true
+      );
+      return;
+    }
+    const tipo = await verificarTipoArchivo(file);
+    if (tipo !== "csv" && tipo !== "json") {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "El archivo debe ser de tipo CSV o JSON",
+        null,
+        true
+      );
+      return;
+    }
 
-    // Espera a que se verifique la validez del archivo
-    const isFileValid = await verificarValidezArchivo(file);
+    if (tipo === "csv") {
+      verificarValidezCSV(file, "prediccion")
+        .then((validacion) => {
+          if (validacion !== "valido") {
+            cambiarEstadoArchivo("error", null, validacion, null, true);
+            return;
+          }
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+          return;
+        });
+    } else if (tipo === "json") {
+      verificarValidezJSON(file, "prediccion")
+        .then((validacion) => {
+          if (validacion !== "valido") {
+            cambiarEstadoArchivo("error", null, validacion, null, true);
+            return;
+          }
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+          return;
+        });
+    }
 
-    if (isFileValid) {
-      setFile(file);
-      setValidFile(true);
-      console.log("Archivo cargado", file);
-    } else {
+    cambiarEstadoArchivo("cargado", file, null, tipo, false);
+    // Verificar que el archivo es CSV o JSON
+  };
+
+  const handleEnviarArchivo = async () => {
+    const archivo = file.file;
+    const tipo = file.tipo;
+    if (archivo === null) {
+      cambiarEstadoArchivo(
+        "error",
+        null,
+        "No se ha seleccionado un archivo",
+        null,
+        true
+      );
+      return;
+    }
+
+    setEstadoPredicciones("cargando");
+
+    if (tipo === "csv") {
+      convertirCSVaJSON(archivo, "prediccion")
+        .then((json) => {
+          postPredecir(json)
+            .then((response) => {
+              const final = json as OpinionDataSet;
+              const csv = generarCSVPredicciones(
+                final.data,
+                response.predicciones
+              );
+              setCsv(csv);
+              setEstadoPredicciones("cargadas");
+              removeFile();
+            })
+            .catch((error) => {
+              cambiarEstadoArchivo("error", null, error, null, true);
+            });
+        })
+        .catch((error) => {
+          setEstadoPredicciones("error");
+        });
+    } else if (tipo === "json") {
+      const json = JSON.parse(await archivo.text());
+      postPredecir(json)
+        .then((response) => {
+          const final = json as OpinionDataSet;
+          const csv = generarCSVPredicciones(final.data, response.predicciones);
+          setCsv(csv);
+          setEstadoPredicciones("cargadas");
+          removeFile();
+        })
+        .catch((error) => {
+          cambiarEstadoArchivo("error", null, error, null, true);
+        });
+    }
+  };
+
+  const handleDescargarCSV = () => {
+    if (csv === null) {
+      return;
+    }
+    // usar csv para descargar
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "predicciones.csv";
+    a.click();
+  };
+
+  const cambiarEstadoArchivo = (
+    estado: string,
+    file: File | null,
+    error: string | null,
+    tipo: "csv" | "json" | null,
+    remove: Boolean
+  ) => {
+    setFileState(estado);
+    setError(error);
+    if (file !== null) {
+      setFile({ file: file, tipo: tipo });
+    }
+    if (remove) {
       removeFile();
     }
   };
 
-  const handleEnviarArchivo = async () => {
-    if (validFile && file) {
-      if (file.type === "text/csv") {
-        const jsonDict = await convertirCSVaJSON(file);
-        const json = JSON.stringify(jsonDict);
-        setSuccess(true);
-        console.log(json);
-      } else if (file.type === "application/json") {
-        console.log(file);
-        setSuccess(true);
-      }
-    }
-  };
-
   const removeFile = () => {
-    setFile(null);
-    setValidFile(false);
+    setFile({
+      file: null,
+      tipo: null,
+    });
     const fileInput = document.getElementById("fileInput") as HTMLInputElement;
     if (fileInput) {
       fileInput.value = "";
     }
-  };
-
-  const validarArchivo = (file: File) => {
-    if (!file) {
-      setError("No se ha cargado ningún archivo");
-      return false;
-    }
-
-    if (file.type !== "application/json" && file.type !== "text/csv") {
-      setError("El archivo debe ser de tipo CSV o JSON");
-      return false;
-    }
-    return true;
-  };
-
-  const verificarValidezArchivo = (file: File): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (!validarArchivo(file)) {
-        resolve(false);
-        return;
-      }
-
-      const reader = new FileReader();
-
-      if (file.type === "text/csv") {
-        reader.onload = (e) => {
-          const contenido = e.target?.result as string;
-          const lineas = contenido.split("\n");
-
-          if (lineas.length === 0) {
-            setError("El archivo está vacío");
-            resolve(false);
-            return;
-          }
-
-          const columnas = lineas[0].split(",");
-          if (columnas.length !== 1 || columnas[0] !== "data") {
-            setError(
-              "El archivo CSV debe tener una única columna llamada 'data'"
-            );
-            resolve(false);
-            return;
-          }
-          resolve(true);
-        };
-        reader.readAsText(file);
-      } else if (file.type === "application/json") {
-        reader.onload = (e) => {
-          const contenido = e.target?.result as string;
-          try {
-            const json = JSON.parse(contenido);
-            if (!json.hasOwnProperty("data")) {
-              setError(
-                "El archivo JSON debe tener una propiedad llamada 'data'"
-              );
-              resolve(false);
-              return;
-            }
-            resolve(true);
-          } catch (error) {
-            setError("El archivo JSON no es válido");
-            resolve(false);
-          }
-        };
-        reader.readAsText(file);
-      } else {
-        setError("El archivo debe ser de tipo CSV o JSON");
-        resolve(false);
-      }
-    });
   };
 
   return (
@@ -147,10 +205,10 @@ export default function FormCarga() {
         )
       }
 
-      <div className="flex gap-4 py-4">
+      <div className="flex flex-col sm:flex-row gap-4 py-4">
         <label
           className={"px-8 py-4 rounded-2xl bg-[#0D92F4] text-white w-fit inline-block  ".concat(
-            file !== null
+            file.file !== null
               ? "bg-opacity-50 cursor-not-allowed "
               : "cursor-pointer"
           )}
@@ -162,12 +220,12 @@ export default function FormCarga() {
             onChange={(e) => handleFileUpload(e)}
             className="hidden"
             id="fileInput" // Agregar un id al input para poder referenciarlo
-            disabled={file !== null}
+            disabled={file.file !== null}
           />
         </label>
         <button
           className={"px-8 py-4 rounded-2xl bg-green-400 text-white w-fit ".concat(
-            !validFile ? "bg-opacity-50 cursor-not-allowed" : ""
+            file.file === null ? "bg-opacity-50 cursor-not-allowed" : ""
           )}
           onClick={handleEnviarArchivo}
         >
@@ -175,11 +233,25 @@ export default function FormCarga() {
         </button>
       </div>
       {
+        // Si el archivo está cargando, mostrarlo
+        fileState === "cargando" && (
+          <p className="font-semibold">Cargando archivo, por favor espere...</p>
+        )
+      }
+      {
+        // Si el archivo está cargando, mostrarlo
+        estadoPredicciones === "cargando" && (
+          <p className="font-semibold">
+            Cargando predicciones, por favor espere...
+          </p>
+        )
+      }
+      {
         // Si hay un archivo cargado, mostrarlo
-        file !== null && (
+        file.file !== null && error === null && (
           <div className="flex gap-4 items-center">
             <p className="font-semibold">Archivo cargado:</p>
-            <p>{file.name}</p>
+            <p>{file.file.name}</p>
             <IoClose
               className="w-8 h-auto text-red-500 cursor-pointer"
               title="Remover archivo"
@@ -190,31 +262,24 @@ export default function FormCarga() {
           </div>
         )
       }
-      {success && (
-        <div
-          className=" fixed top-0 left-0 flex justify-center items-center w-full h-screen z-[200]  bg-black bg-opacity-50"
-          onClick={(e) => {
-            setSuccess(false);
-          }}
-        >
-          <div
-            className="flex flex-col gap-2 bg-white rounded-2xl p-4"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <p className="font-semibold">Opiniones predecidas correctamente</p>
+      {
+        // Si las predicciones están cargadas, mostrar el botón de descarga
+        estadoPredicciones === "cargadas" && (
+          <div className="flex flex-col gap-2 ">
+            <p className="font-semibold">
+              Predicciones cargadas correctamente.
+            </p>
             <button
-              className="bg-green-400 rounded-xl p-2 w-fit h-fit text-white font-semibold"
+              className="bg-[#243642] rounded-xl py-2 px-4 w-fit h-fit text-white font-semibold"
               onClick={() => {
-                setSuccess(false);
+                handleDescargarCSV();
               }}
             >
-              Aceptar
+              Descargar CSV con predicciones
             </button>
           </div>
-        </div>
-      )}
+        )
+      }
     </div>
   );
 }
