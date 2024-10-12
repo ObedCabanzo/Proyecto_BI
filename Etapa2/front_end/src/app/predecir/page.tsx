@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Predicción de opiniones relacionadas con los ODS.",
 };
 
-export default function PredecirPage(props: {}) {
+export default function PredecirPage() {
   // Formulario con los campos: Opinion y boton de enviar, se pueden añadir varias opiniones
   return (
     <div className="flex flex-col px-8 sm:px-16 md:px-24 lg:px-32 py-4 sm:py-8 md:py-16 gap-4  ">

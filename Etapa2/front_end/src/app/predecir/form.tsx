@@ -30,7 +30,7 @@ export default function Form() {
   // Estados permitidos: "No cargadas", "Cargando", "Cargadas", "Error del servidor", "Respuesta invalida"
   const [estadoPredicciones, setEstadoPredicciones] = useState("No cargadas");
 
-  const handleOpinionChange = (event: any) => {
+  const handleOpinionChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (event.target.value.length > MAX_TOKENS) {
       return;
     }
@@ -81,7 +81,7 @@ export default function Form() {
     } else {
 
       // Opiniones sin prediccion
-      let nuevasOpiniones = [...opinionesSinPrediccion];
+      const nuevasOpiniones = [...opinionesSinPrediccion];
       for (let i = 0; i < predicciones.length; i++) {
         nuevasOpiniones[i].ods = predicciones[i].ods;
         nuevasOpiniones[i].score = predicciones[i].score;
@@ -225,7 +225,7 @@ export default function Form() {
       {valid && (
         <div
           className="fixed top-0 flex justify-center items-center w-full h-screen z-[200]  bg-black bg-opacity-50"
-          onClick={(e) => {
+          onClick={() => {
             setValid(false);
           }}
         >

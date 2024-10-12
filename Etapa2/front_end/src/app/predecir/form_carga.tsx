@@ -28,7 +28,10 @@ export default function FormCarga() {
   const [estadoPredicciones, setEstadoPredicciones] = useState("no cargadas");
   const [csv, setCsv] = useState<string | null>(null);
 
-  const handleFileUpload = async (event: any) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files === null) {
+      return;
+    }
     const file = event.target.files[0];
     setFileState("cargando");
     if (file === undefined) {
@@ -121,7 +124,7 @@ export default function FormCarga() {
               cambiarEstadoArchivo("error", null, error, null, true);
             });
         })
-        .catch((error) => {
+        .catch(() => {
           setEstadoPredicciones("error");
         });
     } else if (tipo === "json") {
@@ -158,7 +161,7 @@ export default function FormCarga() {
     file: File | null,
     error: string | null,
     tipo: "csv" | "json" | null,
-    remove: Boolean
+    remove: boolean
   ) => {
     setFileState(estado);
     setError(error);
@@ -192,12 +195,12 @@ export default function FormCarga() {
       </p>
       <div>
         <p className="text-[#091057] font-semibold">
-          Si el archivo es un CSV debe tener una unica columna llamada{" "}
-          <span className="font-bold">"data"</span> con los textos.
+          Si el archivo es un CSV debe tener una unica columna llamada 
+          <span className="font-bold">data</span> con los textos.
         </p>
         <p className="text-[#091057] font-semibold">
-          Si el archivo es un JSON debe tener una unica propiedad llamada{" "}
-          <span className="font-bold">"data"</span> con una lista de textos.
+          Si el archivo es un JSON debe tener una unica propiedad llamada 
+          <span className="font-bold">data</span> con una lista de textos.
         </p>
       </div>
       {
@@ -221,7 +224,7 @@ export default function FormCarga() {
           <input
             type="file"
             accept=".csv, .json"
-            onChange={(e) => handleFileUpload(e)}
+            onChange={handleFileUpload}
             className="hidden"
             id="fileInput" // Agregar un id al input para poder referenciarlo
             disabled={file.file !== null}
@@ -259,7 +262,7 @@ export default function FormCarga() {
             <IoClose
               className="w-8 h-auto text-red-500 cursor-pointer"
               title="Remover archivo"
-              onClick={(e) => {
+              onClick={() => {
                 removeFile();
               }}
             />
